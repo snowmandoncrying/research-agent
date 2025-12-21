@@ -18,8 +18,7 @@ ENV/
 *.swo
 
 # Outputs
-outputs/reports/*.md
-outputs/pdfs/*.pdf
+outputs/
 
 # OS
 .DS_Store
@@ -32,3 +31,8 @@ Thumbs.db
 build/
 dist/
 *.egg-info/
+.claude/
+
+check_models.py
+test_research.py
+test_utils.py

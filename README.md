@@ -57,7 +57,7 @@ python cli_demo.py "AI 기술 동향"
 ### Streamlit UI
 
 ```bash
-streamlit run streamlit_ui.py
+python -m streamlit run streamlit_ui.py
 ```
 
 ## 프로젝트 구조
@@ -87,8 +87,7 @@ research-agent/
 │       ├── llm_config.py               # LLM 초기화 설정
 │       └── search_client.py            # Tavily 클라이언트 래퍼
 │
-├── outputs/                             # 생성된 결과물
-│   ├── reports/                         # Markdown 리포트
+├── outputs/                             # 생성된 결과물                     # Markdown 리포트
 │   └── pdfs/                           # PDF 파일
 │
 ├── streamlit_ui.py                      # Streamlit 웹 인터페이스
@@ -118,7 +117,7 @@ research-agent/
 
 - **LangGraph**: 워크플로우 및 상태 관리
 - **LangChain**: LLM 체인 및 프롬프트 관리
-- **Google Gemini**: LLM 모델 (gemini-1.5-pro)
+- **Google Gemini**: LLM 모델 (gemini-2.5-flash-lite)
 - **Tavily API**: 웹 검색 엔진
 - **ReportLab**: PDF 생성
 - **Streamlit**: 웹 UI

@@ -17,12 +17,6 @@ from reportlab.lib.enums import TA_LEFT, TA_CENTER
 def setup_korean_font():
     """
     한글 폰트를 설정합니다.
-
-    TODO: 시스템에 설치된 한글 폰트를 찾아서 등록해야 합니다.
-    Windows: C:/Windows/Fonts/malgun.ttf (맑은 고딕)
-    macOS: /Library/Fonts/AppleGothic.ttf
-    Linux: /usr/share/fonts/truetype/nanum/NanumGothic.ttf
-
     폰트가 없으면 reportlab의 기본 폰트 사용 (한글 깨짐 가능)
     """
     try:

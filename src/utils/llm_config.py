@@ -16,7 +16,7 @@ def get_llm(model_name: str = None, temperature: float = None):
     LLM 인스턴스를 반환합니다.
 
     Args:
-        model_name: 모델 이름 (기본값: 환경변수 또는 gemini-1.5-pro)
+        model_name: 모델 이름 (기본값: 환경변수 또는 gemini-2.5-flash-lite)
         temperature: 온도 설정 (기본값: 환경변수 또는 0.7)
 
     Returns:
@@ -25,7 +25,7 @@ def get_llm(model_name: str = None, temperature: float = None):
 
     # 환경 변수에서 설정 가져오기
     if model_name is None:
-        model_name = os.getenv("MODEL_NAME", "gemini-1.5-pro")
+        model_name = os.getenv("MODEL_NAME", "gemini-2.5-flash-lite")
 
     if temperature is None:
         temperature = float(os.getenv("TEMPERATURE", "0.7"))

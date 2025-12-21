@@ -5,7 +5,7 @@
 
 from src.research_state import ResearchState
 from src.nodes import (
-    generate_search_queries,
+    generate_queries,
     search_web,
     evaluate_information,
     generate_report,
@@ -33,7 +33,7 @@ def test_query_generator():
     }
 
     # 노드 실행
-    result = generate_search_queries(state)
+    result = generate_queries(state)
 
     print(f"\n생성된 키워드: {result['search_queries']}")
     print(f"반복 횟수: {result['iteration_count']}")

@@ -6,7 +6,7 @@ Research Agent Workflow (LangGraph)
 from typing import Literal
 from langgraph.graph import StateGraph, END
 from src.research_state import ResearchState
-from src.nodes.query_generator import generate_search_queries
+from src.nodes.query_generator import generate_queries
 from src.nodes.web_searcher import search_web
 from src.nodes.info_evaluator import evaluate_information
 from src.nodes.report_generator import generate_report
@@ -29,7 +29,7 @@ def create_research_workflow() -> StateGraph:
     workflow = StateGraph(ResearchState)
 
     # === 노드 추가 ===
-    workflow.add_node("generate_queries", generate_search_queries)
+    workflow.add_node("generate_queries", generate_queries)
     workflow.add_node("search", search_web)
     workflow.add_node("evaluate", evaluate_information)
     workflow.add_node("generate_report", generate_report)
@@ -83,7 +83,7 @@ def should_continue_searching(state: ResearchState) -> Literal["continue", "fini
     return "continue"
 
 
-def run_research_agent(topic: str) -> dict:
+def run_research_agent(topic: str, language: str = "auto") -> dict:
     """
     Research Agent를 실행합니다.
 
@@ -93,10 +93,19 @@ def run_research_agent(topic: str) -> dict:
     Returns:
         최종 상태(State) 딕셔너리
     """
+    # # 언어 자동 감지
+    # if language == "auto":
+    #     detected_language = detect_language(topic)
+    #     print(f"🌐 언어 자동 감지: {detected_language}")
+    # else:
+    #     detected_language = language
+    #     print(f"🌐 선택한 언어: {detected_language}")
+
 
     # 초기 상태 설정
     initial_state: ResearchState = {
         "topic": topic,
+        # "language": detected_language,
         "search_queries": [],
         "search_results": [],
         "evaluation": None,
@@ -122,7 +131,19 @@ def run_research_agent(topic: str) -> dict:
     return final_state
 
 
-# 사용 예시:
-# if __name__ == "__main__":
-#     result = run_research_agent("AI 기술 동향 2024")
-#     print(result["final_report"])
+# def detect_language(topic: str) -> Literal["ko", "en"]:
+#     """
+#     간단한 언어 감지 함수 (한국어/영어)
+
+#     Args:
+#         topic: 감지할 텍스트
+#     Returns:
+#         "ko" 또는 "en"
+#     """
+
+#     has_korean = any('\uac00' <= char <= '\ud7a3' for char in topic)
+
+#     if has_korean:
+#         return "ko"
+#     else:
+#         return "en"
