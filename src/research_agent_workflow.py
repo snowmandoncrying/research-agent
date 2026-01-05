@@ -10,6 +10,7 @@ from src.nodes.query_generator import generate_queries
 from src.nodes.web_searcher import search_web
 from src.nodes.info_evaluator import evaluate_information
 from src.nodes.report_generator import generate_report
+from src.nodes.report_reviewer import review_report
 
 
 def create_research_workflow() -> StateGraph:
@@ -23,6 +24,7 @@ def create_research_workflow() -> StateGraph:
        - sufficient → generate_report
        - insufficient → generate_queries (재시작)
     4. generate_report: 최종 리포트 생성
+    5. review_report: 리뷰어를 통한 피드백 반영하여 수정
     """
 
     # StateGraph 생성
@@ -33,6 +35,7 @@ def create_research_workflow() -> StateGraph:
     workflow.add_node("search", search_web)
     workflow.add_node("evaluate", evaluate_information)
     workflow.add_node("generate_report", generate_report)
+    workflow.add_node("review_report", review_report)
 
     # === 엣지(Edge) 정의 ===
 
@@ -55,10 +58,43 @@ def create_research_workflow() -> StateGraph:
         }
     )
 
-    # generate_report → END
-    workflow.add_edge("generate_report", END)
-
+    # generate_report → needs_revision → generate_report → approved or max_revision → END
+    # 생성하고 파일 저장 안한상태라면 리뷰 받으러 가는 조건부 분기
+    workflow.add_conditional_edges(
+        "generate_report",
+         lambda state: "end" if state.get("output_path") else "review",
+        {
+          "end": END,
+          "review": "review_report"
+        }
+    )
+    
+    workflow.add_conditional_edges(
+        "review_report",
+        decide_after_review,
+        {
+          "revision": "generate_report",
+          "approved": "generate_report",
+          "max_revision": "generate_report",
+        }
+    )
     return workflow
+
+def decide_after_review(state: ResearchState) -> Literal["revision", "approved", "max_revision"]:
+    """
+      review_status에 따라 조건 분기
+    """
+    status = state.get("review_status")
+    revision_count = state.get("revision_count", 0)
+
+    if revision_count >= 2:
+        return "max_revision"
+
+    if status == "approved":
+        return "approved"
+    else:
+      print(f" 수정 필요 (#{revision_count + 1}회) → 재생성")
+      return "revision"
 
 
 def should_continue_searching(state: ResearchState) -> Literal["continue", "finish"]:
@@ -113,6 +149,11 @@ def run_research_agent(topic: str, language: str = "auto") -> dict:
         "iteration_count": 0,
         "final_report": None,
         "output_path": None,
+        "missing_info": None,
+        "recommended_keywords": None,
+        "review_feedback": None,
+        "review_status": None,
+        "revision_count": 0,
     }
 
     # 워크플로우 생성 및 컴파일

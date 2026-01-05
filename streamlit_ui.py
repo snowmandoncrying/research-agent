@@ -4,9 +4,9 @@ Research Agent를 웹 인터페이스로 실행합니다.
 """
 
 import streamlit as st
-from src.research_agent_workflow import run_research_agent
+from src.research_agent_workflow import create_research_workflow
+from src.research_state import ResearchState
 import os
-
 
 def main():
     """
@@ -51,7 +51,8 @@ def main():
            - 검색 키워드 생성
            - 웹 검색 수행
            - 정보 충분성 평가
-           - 리포트 생성 (Markdown + PDF)
+           - 리포트 초안 생성
+           - 리포트 수정 및 파일 생성 (Markdown + PDF)
         """)
 
     # 메인 영역
@@ -81,20 +82,75 @@ def main():
             return
 
         # 진행 상황 표시
-        with st.spinner("🔄 Research Agent 실행 중..."):
+        status_container = st.empty()
+        progress_bar = st.progress(0)
 
-            # 진행 상황 영역
-            progress_container = st.container()
+        try:
+            initial_state: ResearchState = {
+                "topic": topic,
+                "search_queries": [],
+                "search_results": [],
+                "evaluation": None,
+                "evaluation_reason": None,
+                "iteration_count": 0,
+                "final_report": None,
+                "output_path": None,
+                "missing_info": None,
+                "recommended_keywords": None,
+                "review_feedback": None,
+                "review_status": None,
+                "revision_count": 0,
+            }
+            # 워크플로우 생성
+            workflow = create_research_workflow()
+            app = workflow.compile()
 
-            try:
-                # Agent 실행
-                # TODO: 실시간 로그를 Streamlit에 출력하려면
-                # 각 노드에서 st.write() 호출하거나, 로그 캡처 필요
-                result = run_research_agent(topic)
+            result = None
 
-                # 결과 표시
-                st.success("✅ 리서치 완료!")
+            # Stream으로 실시간 추적
+            for event in app.stream(initial_state):
+                node_name = list(event.keys())[0]
+                current_state = event[node_name]
 
+                if node_name == "generate_generate_queries":
+                    progress = 15
+                    message = "검색 키워드 생성 중..."
+                elif node_name == "search":
+                    progress = 30
+                    message = "웹 검색 수행 중..."
+
+                elif node_name == "evaluate":
+                    progress = 50
+                    message = "정보 충분성 평가 중..."
+
+                elif node_name == "generate_report":
+                    revision = current_state.get("revision_count", 0)
+                    if revision == 0:
+                        progress = 70
+                        message = "리포트 생성 중..."
+                    else:
+                        progress = 75 + (revision * 5)
+                        message = f"리포트 수정 중... (수정 {revision}회)"
+
+                elif node_name == "review_report":
+                    revision = current_state.get("revision_count", 0)
+                    progress = 85 + (revision * 3)
+                    message = f"리포트 검토 중... (검토 {revision + 1}회)"
+                else:
+                    progress = None
+                    message = f"{node_name} 실행 중..."
+
+                if progress:
+                    status_container.info(message)
+                    progress_bar.progress(min(progress, 95))
+
+                result = current_state
+
+            status_container.success("리서치 및 리포트 생성 완료")
+            progress_bar.progress(100)
+
+            # 결과 표시
+            if result:  # ✅ result 체크 추가
                 # 탭으로 구분
                 tab1, tab2, tab3 = st.tabs(["📄 리포트", "🔍 검색 결과", "📊 통계"])
 
@@ -144,10 +200,10 @@ def main():
                     st.markdown("**사용된 키워드:**")
                     st.write(", ".join(queries))
 
-            except Exception as e:
-                st.error(f"❌ 오류 발생: {e}")
-                import traceback
-                st.code(traceback.format_exc())
+        except Exception as e:
+            st.error(f"❌ 오류 발생: {e}")
+            import traceback
+            st.code(traceback.format_exc())
 
 
 if __name__ == "__main__":
@@ -155,4 +211,4 @@ if __name__ == "__main__":
 
 
 # 실행 방법:
-# streamlit run streamlit_ui.py
+# streamlit run streamlit_ui.pys
