@@ -119,29 +119,24 @@ def should_continue_searching(state: ResearchState) -> Literal["continue", "fini
     return "continue"
 
 
-def run_research_agent(topic: str, language: str = "auto") -> dict:
+def run_research_agent(topic: str, author: str = "김사원", report_language: str = "ko") -> dict:
     """
     Research Agent를 실행합니다.
 
     Args:
         topic: 리서치 주제
+        report_language: 리포트 언어 ("ko" 또는 "en")
 
     Returns:
         최종 상태(State) 딕셔너리
     """
-    # # 언어 자동 감지
-    # if language == "auto":
-    #     detected_language = detect_language(topic)
-    #     print(f"🌐 언어 자동 감지: {detected_language}")
-    # else:
-    #     detected_language = language
-    #     print(f"🌐 선택한 언어: {detected_language}")
-
 
     # 초기 상태 설정
     initial_state: ResearchState = {
         "topic": topic,
-        # "language": detected_language,
+        "author": author,
+        "search_scope": None,
+        "report_language": report_language,
         "search_queries": [],
         "search_results": [],
         "evaluation": None,
@@ -162,11 +157,9 @@ def run_research_agent(topic: str, language: str = "auto") -> dict:
 
     # 실행
     print(f"🔍 Research Agent 시작: {topic}")
-    print("=" * 60)
+    print(f"📝 리포트 언어: {'한국어' if report_language == 'ko' else 'English'}")  
 
     final_state = app.invoke(initial_state)
-
-    print("=" * 60)
     print("✅ Research Agent 완료!")
 
     return final_state

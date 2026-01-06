@@ -21,6 +21,7 @@ def evaluate_information(state: ResearchState) -> dict:
     """
 
     topic = state["topic"]
+    search_scope = state.get("search_scope", "")
     search_results = state.get("search_results", [])
     iteration_count = state.get("iteration_count", 0)
     
@@ -61,10 +62,12 @@ def evaluate_information(state: ResearchState) -> dict:
 
     # 평가 프롬프트 작성
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "당신은 리서치 자료의 품질을 평가하는 전문가입니다."
-            "수집된 자료가 주제에 대해 심층 리포트를 쓰기에 질적으로 충분한지 판단해주세요."),
+        ("system", "당신은 한국어와 영어 자료의 품질을 통합적으로 분석하는 글로벌 리서치 전문가입니다."
+            "수집된 자료가 주제에 대해 심층 리포트를 쓰기에 질적으로 충분한지 판단해주세요."
+            "특히 기술적 세부 사항이나 글로벌 통계는 영어권 전문 출처(Nature, IEEE, TechCrunch 등)의 자료를 매우 높게 평가하십시오."),
         ("user", """
             주제: {topic}
+            검색 범위: {search_scope}
             수집된 검색 결과 ({search_count}개, 평균 신뢰도: {avg_trust}):{results_summary}
 
             위 정보를 바탕으로, 리포트 작성에 충분한지 평가해주세요.
@@ -104,7 +107,7 @@ def evaluate_information(state: ResearchState) -> dict:
                 "is_sufficient": true 또는 false,
                 "reason": "평가 이유",
                 "missing_info": "부족한 정보 (있다면)",
-                "recommendation": "추가 검색이 필요한 키워드 (있다면)"
+                "recommended_keywords": "추가 검색이 필요한 키워드 (있다면)"
             }}
         """)
         ])
@@ -113,6 +116,7 @@ def evaluate_information(state: ResearchState) -> dict:
     chain = prompt | llm
     response = chain.invoke({
         "topic": topic,
+        "search_scope": search_scope,
         "results_summary": results_summary,
         "search_count": len(search_results),
         "avg_trust": f"{avg_trust:.2f}"
@@ -128,7 +132,6 @@ def evaluate_information(state: ResearchState) -> dict:
             content = content.split("```")[1].split("```")[0]
         
         evaluation = json.loads(content.strip())
-        
         is_sufficient = evaluation.get("is_sufficient", False)
         reason = evaluation.get("reason", "")
         individual_reviews = evaluation.get("individual_reviews", "")
@@ -146,7 +149,7 @@ def evaluate_information(state: ResearchState) -> dict:
             "evaluation": "sufficient" if is_sufficient else "insufficient",
             "evaluation_reason": reason,
             "missing_info": evaluation.get("missing_info"),
-            "recommended_keywords": evaluation.get("recommendation")
+            "recommended_keywords": evaluation.get("recommended_keywords")
         }
         
     except Exception as e:
@@ -200,30 +203,71 @@ def should_continue(state: ResearchState) -> str:
 
 # 검증 테스트
 if __name__ == "__main__":
-    # 간단한 테스트 케이스
-    test_state = ResearchState(
-        topic="인공지능의 최신 동향",
-        search_results=[
-        {"title": "2024 인공지능(AI) 기술 및 시장 동향", "url": "https://gov.kr/report/123", "content": "2024년 AI 시장 규모는 전년 대비 30% 성장하여 10조원 돌파 예상. 생성형 AI가 주도...", "trust_score": 1.0},
-        {"title": "AI 기술 트렌드 총정리", "url": "https://news.naver.com/ai-trend", "content": "ChatGPT 등장 이후 생성형 AI 경쟁 심화. 네이버, 카카오 등 국내 기업도 자체 모델 출시...", "trust_score": 0.8},
-        {"title": "글로벌 AI 시장 분석", "url": "https://news.naver.com/global-ai", "content": "미국과 중국이 AI 기술 경쟁 주도. 유럽은 AI 규제 강화...", "trust_score": 0.6},
-        {"title": "국내 AI 스타트업 현황", "url": "https://techcrunch.com/ai-startup", "content": "국내 AI 스타트업 투자 급증. 생성형 AI 중심으로 성장...", "trust_score": 0.5},
-        {"title": "AI 윤리 이슈", "url": "https://example.com/ai-ethics", "content": "AI 편향성, 개인정보 문제 대두. 규제 필요성 증가...", "trust_score": 0.5},
-        {"title": "AI 산업 적용 사례", "url": "https://blog.naver.com/ai-case", "content": "제조업, 금융업에서 AI 도입 확대. 효율성 향상 효과...", "trust_score": 0.4},
-    ],
-        iteration_count=2
-    )
+    from ..research_state import ResearchState
 
+    # 1. 글로벌 리서치 테스트 케이스 (충분한 정보 시나리오)
+    print("\n" + "="*60)
+    print("🌍 [Test 1] 글로벌 리서치 정보 충분성 평가")
+    print("="*60)
+
+    test_state = {
+        "topic": "인공지능(AI) 기반 의료 진단 기술의 글로벌 동향",
+        "search_scope": "global",  # 글로벌 범위 설정
+        "iteration_count": 2,      # 2회차 반복
+        "search_results": [
+            {
+                "title": "[Global] AI in Medical Imaging: Market Trends 2024", 
+                "url": "https://www.nature.com/articles/ai-health", 
+                "content": "The global market for AI in medical imaging is expected to grow at a CAGR of 35%. Current focus is on early cancer detection using transformer-based models...", 
+                "trust_score": 0.9
+            },
+            {
+                "title": "[Global] IEEE: Deep Learning for Clinical Diagnosis", 
+                "url": "https://ieeexplore.ieee.org/document/12345", 
+                "content": "We propose a new multi-modal AI framework for early diagnosis. Performance benchmarks show 98% accuracy in localized datasets...", 
+                "trust_score": 0.9
+            },
+            {
+                "title": "국내 AI 의료기기 인허가 가이드라인", 
+                "url": "https://gov.kr/report/medical-ai", 
+                "content": "식약처는 2024년 AI 의료기기 소프트웨어에 대한 새로운 심사 가이드를 발표함. 국내 기업의 글로벌 진출 지원 방안 포함...", 
+                "trust_score": 1.0
+            },
+            {
+                "title": "루닛-뷰노 등 국내 AI 의료 진단 기업 해외 성과", 
+                "url": "https://news.naver.com/tech/health-ai", 
+                "content": "국내 주요 AI 의료 기업들이 미국 FDA 승인을 잇따라 획득하며 글로벌 시장 점유율을 확대 중...", 
+                "trust_score": 0.8
+            },
+            {
+                "title": "AI 윤리 및 의료 데이터 보안 이슈", 
+                "url": "https://example.com/ethics-ai", 
+                "content": "Patient data privacy remains a key challenge for AI implementation in hospitals...", 
+                "trust_score": 0.5
+            },
+            {
+                "title": "Future of AI in Diagnostics", 
+                "url": "https://techcrunch.com/future-ai", 
+                "content": "Future perspectives on decentralized AI and federated learning in healthcare...", 
+                "trust_score": 0.75
+            },
+        ]
+    }
+
+    # 평가 실행
     eval_result = evaluate_information(test_state)
 
-    print("\n[개별 결과 분석]")
-    for i, res in enumerate(test_state["search_results"], 1):
-      print(f"{i}. 점수: {res['trust_score']:.1f} | 제목: {res['title']}")
-
+    print("\n" + "-"*60)
+    print(f"✅ 리서치 주제: {test_state['topic']}")
+    print(f"✅ 검색 범위: {test_state['search_scope']}")
+    print(f"✅ 수집 자료 수: {len(test_state['search_results'])}개")
+    
     print("\n[최종 평가 결과]")
-    print(f"상태: {eval_result.get('evaluation')}")
-    print(f"이유: {eval_result.get('evaluation_reason')}")
+    print(f"📍 상태: {eval_result.get('evaluation')}")
+    print(f"📍 이유: {eval_result.get('evaluation_reason')}")
     
     if eval_result.get('evaluation') == "insufficient":
-        print(f"부족 정보: {eval_result.get('missing_info', '없음')}")
-        print(f"추천 키워드: {eval_result.get('recommended_keywords', '없음')}")
+        print(f"📍 부족 정보: {eval_result.get('missing_info', 'N/A')}")
+        print(f"📍 추천 키워드: {eval_result.get('recommended_keywords', 'N/A')}")
+    
+    print("="*60 + "\n")

@@ -12,6 +12,8 @@ class ResearchState(TypedDict):
     # 사용자가 요청한 리서치 주제
     topic: str
 
+    author: Optional[str]
+
     # 사용 언어
     report_language: Literal["ko", "en"]
     search_scope: Literal["local", "global"]

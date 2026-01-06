@@ -5,129 +5,195 @@ Markdown 리포트를 PDF로 변환합니다.
 
 import os
 from datetime import datetime
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.lib.enums import TA_LEFT, TA_CENTER
+from io import BytesIO
+import markdown
+from xhtml2pdf import pisa
 
 
-def setup_korean_font():
+def markdown_to_html(markdown_text: str, title: str) -> str:
     """
-    한글 폰트를 설정합니다.
-    폰트가 없으면 reportlab의 기본 폰트 사용 (한글 깨짐 가능)
-    """
-    try:
-        # Windows 맑은 고딕 시도
-        font_path = "C:/Windows/Fonts/malgun.ttf"
-        if os.path.exists(font_path):
-            pdfmetrics.registerFont(TTFont('Korean', font_path))
-            return 'Korean'
-    except Exception as e:
-        print(f"⚠️ 한글 폰트 등록 실패: {e}")
-
-    # 기본 폰트 사용
-    return 'Helvetica'
-
-
-def markdown_to_pdf_simple(markdown_text: str, output_path: str, title: str):
-    """
-    Markdown 텍스트를 간단하게 PDF로 변환합니다.
+    Markdown 텍스트를 HTML로 변환합니다.
 
     Args:
         markdown_text: Markdown 형식의 텍스트
-        output_path: PDF 저장 경로
         title: 문서 제목
+
+    Returns:
+        HTML 문자열
     """
 
-    # PDF 문서 생성
-    doc = SimpleDocTemplate(
-        output_path,
-        pagesize=A4,
-        rightMargin=72,
-        leftMargin=72,
-        topMargin=72,
-        bottomMargin=18,
-    )
+    # Markdown을 HTML로 변환
+    md = markdown.Markdown(extensions=[
+        'extra',        # 테이블, 각주 등 확장 기능
+        'nl2br',        # 줄바꿈을 <br>로 변환
+        'sane_lists',   # 리스트 처리 개선
+    ])
 
-    # 스타일 설정
-    styles = getSampleStyleSheet()
-    font_name = setup_korean_font()
+    body_html = md.convert(markdown_text)
 
-    # 커스텀 스타일
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontName=font_name,
-        fontSize=24,
-        textColor='#333333',
-        spaceAfter=30,
-        alignment=TA_CENTER,
-    )
+    # 완전한 HTML 문서 생성 (CSS 스타일 포함)
+    html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{title}</title>
+    <style>
+        @page {{
+            size: A4;
+            margin: 2cm;
+        }}
 
-    heading_style = ParagraphStyle(
-        'CustomHeading',
-        parent=styles['Heading2'],
-        fontName=font_name,
-        fontSize=16,
-        textColor='#444444',
-        spaceAfter=12,
-    )
+        body {{
+            font-family: "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", sans-serif;
+            font-size: 11pt;
+            line-height: 1.6;
+            color: #333;
+        }}
 
-    body_style = ParagraphStyle(
-        'CustomBody',
-        parent=styles['BodyText'],
-        fontName=font_name,
-        fontSize=11,
-        leading=16,
-        spaceAfter=12,
-    )
+        h1 {{
+            font-size: 24pt;
+            font-weight: bold;
+            color: #1a1a1a;
+            margin-top: 0;
+            margin-bottom: 0.5cm;
+            padding-bottom: 0.3cm;
+            border-bottom: 2px solid #333;
+        }}
 
-    # Story (문서 내용)
-    story = []
+        h2 {{
+            font-size: 18pt;
+            font-weight: bold;
+            color: #2c2c2c;
+            margin-top: 0.8cm;
+            margin-bottom: 0.4cm;
+            page-break-after: avoid;
+        }}
 
-    # 제목 추가
-    story.append(Paragraph(title, title_style))
-    story.append(Spacer(1, 0.2 * inch))
+        h3 {{
+            font-size: 14pt;
+            font-weight: bold;
+            color: #444;
+            margin-top: 0.6cm;
+            margin-bottom: 0.3cm;
+            page-break-after: avoid;
+        }}
 
-    # Markdown 파싱 (간단한 버전)
-    # TODO: 더 정교한 Markdown 파싱 라이브러리 사용 가능 (markdown2, mistune 등)
-    lines = markdown_text.split('\n')
+        p {{
+            margin: 0.3cm 0;
+            text-align: justify;
+        }}
 
-    for line in lines:
-        line = line.strip()
+        strong, b {{
+            font-weight: bold;
+            color: #000;
+        }}
 
-        if not line:
-            story.append(Spacer(1, 0.1 * inch))
-            continue
+        em, i {{
+            font-style: italic;
+        }}
 
-        # 제목 처리
-        if line.startswith('# '):
-            text = line[2:].strip()
-            story.append(Paragraph(text, title_style))
-        elif line.startswith('## '):
-            text = line[3:].strip()
-            story.append(Paragraph(text, heading_style))
-        elif line.startswith('### '):
-            text = line[4:].strip()
-            story.append(Paragraph(text, heading_style))
-        # 굵은 글씨
-        elif line.startswith('**') and line.endswith('**'):
-            text = line[2:-2]
-            story.append(Paragraph(f"<b>{text}</b>", body_style))
-        # 구분선
-        elif line.startswith('---'):
-            story.append(Spacer(1, 0.2 * inch))
-        # 일반 텍스트
-        else:
-            # HTML 특수문자 이스케이프
-            text = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-            story.append(Paragraph(text, body_style))
+        ul, ol {{
+            margin: 0.3cm 0;
+            padding-left: 1.5cm;
+        }}
 
-    # PDF 빌드
-    doc.build(story)
+        li {{
+            margin: 0.2cm 0;
+        }}
+
+        a {{
+            color: #0066cc;
+            text-decoration: none;
+        }}
+
+        hr {{
+            border: none;
+            border-top: 1px solid #ccc;
+            margin: 0.5cm 0;
+        }}
+
+        code {{
+            background-color: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 10pt;
+        }}
+
+        pre {{
+            background-color: #f5f5f5;
+            padding: 0.3cm;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin: 0.3cm 0;
+        }}
+
+        pre code {{
+            background-color: transparent;
+            padding: 0;
+        }}
+
+        blockquote {{
+            margin: 0.3cm 0;
+            padding-left: 0.5cm;
+            border-left: 3px solid #ccc;
+            color: #666;
+        }}
+
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0.3cm 0;
+        }}
+
+        th, td {{
+            border: 1px solid #ddd;
+            padding: 0.2cm;
+            text-align: left;
+        }}
+
+        th {{
+            background-color: #f5f5f5;
+            font-weight: bold;
+        }}
+    </style>
+</head>
+<body>
+    {body_html}
+</body>
+</html>
+    """
+
+    return html
+
+
+def html_to_pdf(html_content: str, output_path: str) -> bool:
+    """
+    HTML을 PDF로 변환합니다.
+
+    Args:
+        html_content: HTML 문자열
+        output_path: PDF 저장 경로
+
+    Returns:
+        성공 여부 (True/False)
+    """
+
+    try:
+        with open(output_path, "wb") as pdf_file:
+            # HTML을 PDF로 변환
+            pisa_status = pisa.CreatePDF(
+                html_content,
+                dest=pdf_file,
+                encoding='utf-8'
+            )
+
+            return not pisa_status.err
+
+    except Exception as e:
+        print(f"  ⚠️ PDF 변환 오류: {e}")
+        return False
 
 
 def save_markdown_as_pdf(markdown_content: str, topic: str) -> str:
@@ -151,15 +217,21 @@ def save_markdown_as_pdf(markdown_content: str, topic: str) -> str:
     pdf_path = f"outputs/pdfs/{safe_filename}_{timestamp_str}.pdf"
 
     try:
-        # PDF 생성
-        markdown_to_pdf_simple(markdown_content, pdf_path, topic)
-        print(f"  ✅ PDF 생성 성공: {pdf_path}")
+        # Markdown을 HTML로 변환
+        html_content = markdown_to_html(markdown_content, topic)
+
+        # HTML을 PDF로 변환
+        success = html_to_pdf(html_content, pdf_path)
+
+        if success:
+            print(f"  ✅ PDF 생성 성공: {pdf_path}")
+        else:
+            print(f"  ⚠️ PDF 생성 실패")
 
     except Exception as e:
         print(f"  ⚠️ PDF 생성 실패: {e}")
-        # 실패 시 빈 파일 생성
-        with open(pdf_path, "w") as f:
-            f.write("")
+        import traceback
+        traceback.print_exc()
 
     return pdf_path
 
