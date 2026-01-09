@@ -107,8 +107,10 @@ def evaluate_information(state: ResearchState) -> dict:
                 "is_sufficient": true 또는 false,
                 "reason": "평가 이유",
                 "missing_info": "부족한 정보 (있다면)",
-                "recommended_keywords": "추가 검색이 필요한 키워드 (있다면)"
+                "recommended_keywords": ["키워드1", "키워드2", "키워드3"]
             }}
+
+            중요: recommended_keywords는 반드시 배열(리스트) 형식으로 제공해주세요. 문자열이 아닙니다!
         """)
         ])
     
@@ -136,6 +138,16 @@ def evaluate_information(state: ResearchState) -> dict:
         reason = evaluation.get("reason", "")
         individual_reviews = evaluation.get("individual_reviews", "")
 
+        # recommended_keywords 검증 및 변환
+        recommended_keywords = evaluation.get("recommended_keywords", [])
+        if isinstance(recommended_keywords, str):
+            # 문자열로 반환된 경우 → 리스트로 변환
+            recommended_keywords = [kw.strip() for kw in recommended_keywords.split(",") if kw.strip()]
+            print(f"  ⚠️ 키워드가 문자열로 반환되어 리스트로 변환: {recommended_keywords}")
+        elif not isinstance(recommended_keywords, list):
+            # 리스트도 문자열도 아닌 경우
+            recommended_keywords = []
+
         print(f"\n[자료별 평가]\n{individual_reviews}")
         print(f"\n[종합 평가]")
         print(f"  평가 결과: {'충분' if is_sufficient else '부족'}")
@@ -143,13 +155,13 @@ def evaluate_information(state: ResearchState) -> dict:
 
         if not is_sufficient:
             print(f"  부족한 정보: {evaluation.get('missing_info', 'N/A')}")
-            print(f"  추천 키워드: {evaluation.get('recommendation', 'N/A')}")
-        
+            print(f"  추천 키워드: {recommended_keywords}")
+
         return {
             "evaluation": "sufficient" if is_sufficient else "insufficient",
             "evaluation_reason": reason,
             "missing_info": evaluation.get("missing_info"),
-            "recommended_keywords": evaluation.get("recommended_keywords")
+            "recommended_keywords": recommended_keywords
         }
         
     except Exception as e:

@@ -5,9 +5,18 @@ Markdown 리포트를 PDF로 변환합니다.
 
 import os
 from datetime import datetime
-from io import BytesIO
 import markdown
-from xhtml2pdf import pisa
+from io import BytesIO
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import cm
+from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Image
+from reportlab.platypus import Table, TableStyle, ListFlowable, ListItem
+from reportlab.lib import colors
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from bs4 import BeautifulSoup
 
 
 def markdown_to_html(markdown_text: str, title: str) -> str:
@@ -45,7 +54,7 @@ def markdown_to_html(markdown_text: str, title: str) -> str:
         }}
 
         body {{
-            font-family: "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", sans-serif;
+            font-family: Malgun Gothic, sans-serif;
             font-size: 11pt;
             line-height: 1.6;
             color: #333;
@@ -117,7 +126,7 @@ def markdown_to_html(markdown_text: str, title: str) -> str:
             background-color: #f5f5f5;
             padding: 2px 6px;
             border-radius: 3px;
-            font-family: "Consolas", "Monaco", monospace;
+            font-family: Consolas, monospace;
             font-size: 10pt;
         }}
 
@@ -168,9 +177,117 @@ def markdown_to_html(markdown_text: str, title: str) -> str:
     return html
 
 
+def _register_korean_font():
+    """
+    한글 폰트를 등록합니다. (Windows 환경)
+    """
+    try:
+        # Windows 기본 한글 폰트 등록
+        font_path = "C:/Windows/Fonts/malgun.ttf"  # 맑은 고딕
+        if os.path.exists(font_path):
+            pdfmetrics.registerFont(TTFont('MalgunGothic', font_path))
+            return 'MalgunGothic'
+    except:
+        pass
+
+    # 폰트 등록 실패시 기본 폰트 사용
+    return 'Helvetica'
+
+
+def _html_to_flowables(html_content: str, styles):
+    """
+    HTML을 ReportLab Flowable 객체로 변환합니다.
+    """
+    soup = BeautifulSoup(html_content, 'html.parser')
+    flowables = []
+
+    # body 태그 내용만 파싱
+    body = soup.find('body')
+    if not body:
+        body = soup
+
+    for element in body.children:
+        if element.name is None:  # 텍스트 노드
+            continue
+
+        if element.name == 'h1':
+            para = Paragraph(element.get_text(), styles['Heading1'])
+            flowables.append(para)
+            flowables.append(Spacer(1, 0.3*cm))
+
+        elif element.name == 'h2':
+            para = Paragraph(element.get_text(), styles['Heading2'])
+            flowables.append(para)
+            flowables.append(Spacer(1, 0.2*cm))
+
+        elif element.name == 'h3':
+            para = Paragraph(element.get_text(), styles['Heading3'])
+            flowables.append(para)
+            flowables.append(Spacer(1, 0.2*cm))
+
+        elif element.name == 'p':
+            text = element.get_text()
+            if text.strip():
+                para = Paragraph(text, styles['BodyText'])
+                flowables.append(para)
+                flowables.append(Spacer(1, 0.2*cm))
+
+        elif element.name in ['ul', 'ol']:
+            items = []
+            for li in element.find_all('li', recursive=False):
+                items.append(ListItem(Paragraph(li.get_text(), styles['BodyText'])))
+            if items:
+                list_flow = ListFlowable(items, bulletType='bullet' if element.name == 'ul' else '1')
+                flowables.append(list_flow)
+                flowables.append(Spacer(1, 0.2*cm))
+
+        elif element.name == 'img':
+            # 이미지 처리
+            img_src = element.get('src')
+            if img_src:
+                # file:// 프로토콜 제거
+                if img_src.startswith('file:///'):
+                    img_src = img_src[8:]  # file:/// 제거
+                elif img_src.startswith('file://'):
+                    img_src = img_src[7:]  # file:// 제거
+
+                # 슬래시를 백슬래시로 변환 (Windows 경로 정규화)
+                img_src = img_src.replace("/", "\\")
+
+                print(f"  🔍 이미지 경로 확인: {img_src}")
+                print(f"  🔍 파일 존재 여부: {os.path.exists(img_src)}")
+
+                if os.path.exists(img_src):
+                    try:
+                        # 이미지를 페이지 너비에 맞게 조정 (최대 15cm)
+                        img = Image(img_src, width=15*cm, height=None, kind='proportional')
+                        flowables.append(img)
+                        flowables.append(Spacer(1, 0.3*cm))
+                        print(f"  ✅ PDF에 차트 삽입 성공: {img_src}")
+                    except Exception as e:
+                        print(f"  ⚠️ 이미지 삽입 실패 ({img_src}): {e}")
+                        import traceback
+                        traceback.print_exc()
+                else:
+                    print(f"  ❌ 이미지 파일을 찾을 수 없음: {img_src}")
+                    # 절대경로 시도
+                    abs_img_src = os.path.abspath(img_src)
+                    print(f"  🔍 절대경로 시도: {abs_img_src}")
+                    if os.path.exists(abs_img_src):
+                        try:
+                            img = Image(abs_img_src, width=15*cm, height=None, kind='proportional')
+                            flowables.append(img)
+                            flowables.append(Spacer(1, 0.3*cm))
+                            print(f"  ✅ PDF에 차트 삽입 성공 (절대경로): {abs_img_src}")
+                        except Exception as e:
+                            print(f"  ⚠️ 이미지 삽입 실패 ({abs_img_src}): {e}")
+
+    return flowables
+
+
 def html_to_pdf(html_content: str, output_path: str) -> bool:
     """
-    HTML을 PDF로 변환합니다.
+    HTML을 PDF로 변환합니다. (ReportLab 사용)
 
     Args:
         html_content: HTML 문자열
@@ -181,18 +298,57 @@ def html_to_pdf(html_content: str, output_path: str) -> bool:
     """
 
     try:
-        with open(output_path, "wb") as pdf_file:
-            # HTML을 PDF로 변환
-            pisa_status = pisa.CreatePDF(
-                html_content,
-                dest=pdf_file,
-                encoding='utf-8'
-            )
+        # PDF 문서 생성
+        doc = SimpleDocTemplate(
+            output_path,
+            pagesize=A4,
+            rightMargin=2*cm,
+            leftMargin=2*cm,
+            topMargin=2*cm,
+            bottomMargin=2*cm
+        )
 
-            return not pisa_status.err
+        # 한글 폰트 등록
+        korean_font = _register_korean_font()
+
+        # 스타일 정의
+        styles = getSampleStyleSheet()
+
+        # 한글 폰트 적용
+        styles['Normal'].fontName = korean_font
+        styles['BodyText'].fontName = korean_font
+        styles['Heading1'].fontName = korean_font
+        styles['Heading2'].fontName = korean_font
+        styles['Heading3'].fontName = korean_font
+
+        # 스타일 커스터마이징
+        styles['Heading1'].fontSize = 24
+        styles['Heading1'].spaceAfter = 0.5*cm
+        styles['Heading1'].textColor = colors.HexColor('#1a1a1a')
+
+        styles['Heading2'].fontSize = 18
+        styles['Heading2'].spaceAfter = 0.4*cm
+        styles['Heading2'].textColor = colors.HexColor('#2c2c2c')
+
+        styles['Heading3'].fontSize = 14
+        styles['Heading3'].spaceAfter = 0.3*cm
+        styles['Heading3'].textColor = colors.HexColor('#444444')
+
+        styles['BodyText'].fontSize = 11
+        styles['BodyText'].alignment = TA_JUSTIFY
+        styles['BodyText'].textColor = colors.HexColor('#333333')
+
+        # HTML을 Flowable로 변환
+        flowables = _html_to_flowables(html_content, styles)
+
+        # PDF 생성
+        doc.build(flowables)
+        return True
 
     except Exception as e:
         print(f"  ⚠️ PDF 변환 오류: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 

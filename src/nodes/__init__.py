@@ -6,11 +6,11 @@ LangGraph 노드 모듈
 from .query_generator import generate_queries
 from .web_searcher import search_web
 from .info_evaluator import evaluate_information
-from .report_generator import generate_report
+from .report_file_generator import generate_report_file
 
 __all__ = [
     "generate_queries",
     "search_web",
     "evaluate_information",
-    "generate_report",
+    "generate_report_file",
 ]

@@ -1,5 +1,7 @@
 # Environment Variables
 .env
+.env.local
+.env.*.local
 
 # Python
 __pycache__/
@@ -10,19 +12,22 @@ __pycache__/
 venv/
 env/
 ENV/
+*.pyc
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+.devcontainer/
 
-# Outputs
+# Outputs (생성된 리포트 및 차트)
 outputs/
 
 # OS
 .DS_Store
 Thumbs.db
+nul
 
 # Logs
 *.log
@@ -33,6 +38,14 @@ dist/
 *.egg-info/
 .claude/
 
+# Test files (루트 폴더의 임시 테스트 파일만 제외)
 check_models.py
 test_research.py
 test_utils.py
+/report_test.py
+/chart_extraction_test.py
+/api_server.py
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb

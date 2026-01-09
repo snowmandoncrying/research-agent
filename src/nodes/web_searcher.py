@@ -3,13 +3,14 @@ Web Searcher Node
 웹 검색을 수행하는 노드
 """
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from ..research_state import ResearchState
 from ..utils.search_client import get_tavily_client
 from ..utils.domain_trust import get_domain_score
 
 EXCLUDE_DOMAINS = [
     "kmong.com",
-    "fiverr.com", 
+    "fiverr.com",
     "coupang.com",
     "gmarket.co.kr",
     "11st.co.kr",
@@ -18,9 +19,55 @@ EXCLUDE_DOMAINS = [
     "interpark.com",
 ]
 
+def _search_single_query(query: str, tavily) -> tuple:
+    """
+    단일 쿼리를 검색하고 결과를 반환 (병렬 처리용)
+
+    Returns:
+        tuple: (query, results_list, filtered_count)
+    """
+    print(f"  🔍 검색: {query}")
+    results = []
+    filtered_count = 0
+
+    try:
+        # Tavily 검색 실행
+        response = tavily.search(
+            query=query,
+            max_results=3,
+            search_depth="advanced",
+            exclude_domains=EXCLUDE_DOMAINS
+        )
+
+        # 결과 파싱 및 필터링
+        for item in response.get("results", []):
+            url = item.get("url", "")
+            trust_score = get_domain_score(url)
+
+            if trust_score <= 0.25:
+                filtered_count += 1
+                print(f"   ⚠️ 2차 필터링: {url} (점수: {trust_score})")
+                continue
+
+            results.append({
+                "title": item.get("title", ""),
+                "url": item.get("url", ""),
+                "content": item.get("content", ""),
+                "trust_score": trust_score
+            })
+
+        total = len(response.get('results', []))
+        collected = total - filtered_count
+        print(f"    → {total}개 검색, {collected}개 수집, {filtered_count}개 제외")
+
+    except Exception as e:
+        print(f"    ⚠️ 검색 실패: {e}")
+
+    return (query, results, filtered_count)
+
 def search_web(state: ResearchState) -> dict:
     """
-    생성된 검색 쿼리로 웹 검색을 수행하고, 광고 및 신뢰도가 낮은 사이트를 필터링
+    생성된 검색 쿼리로 웹 검색을 수행하고, 광고 및 신뢰도가 낮은 사이트를 필터링 (병렬 처리)
     1단계: Tavily API에서 광고 도메인 제외
     2단계: score로 추가 필터링
     """
@@ -31,48 +78,28 @@ def search_web(state: ResearchState) -> dict:
         print("[Web Searcher] 검색 쿼리가 없습니다.")
         return {"search_results": state.get("search_results", [])}
 
-    print(f"\n[Web Searcher] 웹 검색 실행 중... ({len(queries)}개 쿼리)")
+    print(f"\n[Web Searcher] 🚀 병렬 웹 검색 실행 중... ({len(queries)}개 쿼리)")
 
     # Tavily 클라이언트 초기화
     tavily = get_tavily_client()
     all_results = []
-    filtered_count = 0
 
-    for query in queries:
-        print(f"  🔍 검색: {query}")
+    # 병렬 처리로 모든 쿼리 검색
+    with ThreadPoolExecutor(max_workers=min(len(queries), 5)) as executor:
+        # 모든 쿼리를 동시에 제출
+        future_to_query = {
+            executor.submit(_search_single_query, query, tavily): query
+            for query in queries
+        }
 
-        try:
-            # Tavily 검색 실행 (1차)
-            response = tavily.search(
-                query=query,
-                max_results=3,
-                search_depth="advanced",
-                exclude_domains=EXCLUDE_DOMAINS
-            )
-
-            # 결과 파싱 (2차)
-            for item in response.get("results", []):
-                url = item.get("url", "")
-                trust_score = get_domain_score(url)
-
-                if trust_score <= 0.25:
-                    filtered_count += 1
-                    print(f"   ⚠️ 2차 필터링: {url} (점수: {trust_score})")
-                    continue 
-
-                all_results.append({
-                    "title": item.get("title", ""),
-                    "url": item.get("url", ""),
-                    "content": item.get("content", ""),
-                    "trust_score": trust_score
-                })
-
-            total = len(response.get('results', []))
-            collected = total - filtered_count
-            print(f"    → {total}개 검색, {collected}개 수집, {filtered_count}개 제외")
-
-        except Exception as e:
-            print(f"    ⚠️ 검색 실패: {e}")
+        # 완료되는 대로 결과 수집
+        for future in as_completed(future_to_query):
+            try:
+                query, results, filtered_count = future.result()
+                all_results.extend(results)
+            except Exception as e:
+                query = future_to_query[future]
+                print(f"    ⚠️ 쿼리 '{query}' 처리 실패: {e}")
 
     # 기존 결과와 병합 및 중복 제거
     existing_results = state.get("search_results", [])

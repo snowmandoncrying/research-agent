@@ -14,6 +14,9 @@ class ResearchState(TypedDict):
 
     author: Optional[str]
 
+    chart_data: Optional[List[Dict]]
+    chart_paths: Optional[List[str]]
+
     # 사용 언어
     report_language: Literal["ko", "en"]
     search_scope: Literal["local", "global"]

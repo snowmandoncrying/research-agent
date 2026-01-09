@@ -8,7 +8,7 @@ from src.nodes import (
     generate_queries,
     search_web,
     evaluate_information,
-    generate_report,
+    generate_report_file,
 )
 
 
@@ -85,7 +85,7 @@ def test_report_generator(state: ResearchState):
     print("=" * 60)
 
     # 노드 실행
-    result = generate_report(state)
+    result = generate_report_file(state)
 
     print(f"\nPDF 경로: {result['output_path']}")
     print(f"리포트 길이: {len(result['final_report'])} 글자")

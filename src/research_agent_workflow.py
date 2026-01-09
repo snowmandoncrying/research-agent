@@ -9,8 +9,10 @@ from src.research_state import ResearchState
 from src.nodes.query_generator import generate_queries
 from src.nodes.web_searcher import search_web
 from src.nodes.info_evaluator import evaluate_information
-from src.nodes.report_generator import generate_report
+from src.nodes.report_file_generator import generate_report_file
+from src.nodes.report_content_generator import generate_report_content
 from src.nodes.report_reviewer import review_report
+from src.nodes.chart_generator import extract_chart_data
 
 
 def create_research_workflow() -> StateGraph:
@@ -18,13 +20,14 @@ def create_research_workflow() -> StateGraph:
     LangGraph 워크플로우를 생성합니다.
 
     워크플로우 구조:
-    1. generate_queries: 검색 키워드 생성
-    2. search: 웹 검색 실행
-    3. evaluate: 정보 충분성 평가
-       - sufficient → generate_report
-       - insufficient → generate_queries (재시작)
-    4. generate_report: 최종 리포트 생성
-    5. review_report: 리뷰어를 통한 피드백 반영하여 수정
+    1. generate_queries
+    2. search
+    3. evaluate
+    4. generate_report_content   (본문 생성)
+    5. review_report             (수정 반복)
+    6. extract_chart_data        (차트 데이터 + 이미지 생성)
+    7. generate_report           (차트 삽입 + 파일 저장)
+    8. END
     """
 
     # StateGraph 생성
@@ -34,72 +37,65 @@ def create_research_workflow() -> StateGraph:
     workflow.add_node("generate_queries", generate_queries)
     workflow.add_node("search", search_web)
     workflow.add_node("evaluate", evaluate_information)
-    workflow.add_node("generate_report", generate_report)
+    workflow.add_node("generate_report", generate_report_file)
+    workflow.add_node("generate_report_content", generate_report_content)
     workflow.add_node("review_report", review_report)
+    workflow.add_node("extract_chart_data", extract_chart_data)
 
     # === 엣지(Edge) 정의 ===
 
     # 시작: generate_queries
     workflow.set_entry_point("generate_queries")
 
-    # generate_queries → search
     workflow.add_edge("generate_queries", "search")
-
-    # search → evaluate
     workflow.add_edge("search", "evaluate")
 
-    # evaluate → 조건부 분기
-    workflow.add_conditional_edges(
-        "evaluate",
-        should_continue_searching,  # 조건 함수
-        {
-            "continue": "generate_queries",  # 정보 부족 → 다시 검색
-            "finish": "generate_report",     # 정보 충분 → 리포트 생성
-        }
+    # 검색 충분성 판단 분기
+    workflow.add_conditional_edges( "evaluate", should_continue_searching,  
+      { "continue": "generate_queries", "finish": "generate_report_content", }
     )
 
-    # generate_report → needs_revision → generate_report → approved or max_revision → END
-    # 생성하고 파일 저장 안한상태라면 리뷰 받으러 가는 조건부 분기
-    workflow.add_conditional_edges(
-        "generate_report",
-         lambda state: "end" if state.get("output_path") else "review",
-        {
-          "end": END,
-          "review": "review_report"
-        }
+    workflow.add_edge("generate_report_content", "review_report")
+
+    # 리뷰 결과에 따른 분기
+    workflow.add_conditional_edges("review_report", decide_after_review,
+      { 
+        "revision": "generate_report_content",
+        "approved": "extract_chart_data",
+        "max_revision": "extract_chart_data",
+      }
     )
-    
-    workflow.add_conditional_edges(
-        "review_report",
-        decide_after_review,
-        {
-          "revision": "generate_report",
-          "approved": "generate_report",
-          "max_revision": "generate_report",
-        }
-    )
+
+    # 차트 생성 후 최종 파일 저장
+    workflow.add_edge("extract_chart_data", "generate_report")
+    workflow.add_edge("generate_report", END)
+
     return workflow
+
 
 def decide_after_review(state: ResearchState) -> Literal["revision", "approved", "max_revision"]:
     """
-      review_status에 따라 조건 분기
+    review_status에 따라 조건 분기
+
+    수정 횟수 제한: 최대 1회까지만 수정 가능
     """
     status = state.get("review_status")
     revision_count = state.get("revision_count", 0)
 
-    if revision_count >= 2:
+    # 최대 1회 수정으로 제한
+    if revision_count >= 1:
+        print(f"  ⚠️ 최대 수정 횟수(1회) 도달 - 차트 생성 진행")
         return "max_revision"
 
     if status == "approved":
         return "approved"
-    else:
-      print(f" 수정 필요 (#{revision_count + 1}회) → 재생성")
-      return "revision"
+
+    return "revision"
 
 
 def should_continue_searching(state: ResearchState) -> Literal["continue", "finish"]:
     """
-    조건부 분기 함수: 검색을 계속할지 결정
+    검색을 계속할지 결정
 
     조건:
     1. evaluation == "sufficient" → finish
@@ -113,8 +109,7 @@ def should_continue_searching(state: ResearchState) -> Literal["continue", "fini
         return "finish"
 
     if state.get("iteration_count", 0) >= max_iterations:
-        print(f"⚠️ 최대 반복 횟수({max_iterations})에 도달했습니다. 리포트를 생성합니다.")
-        return "finish"
+      return "finish"
 
     return "continue"
 
@@ -149,19 +144,14 @@ def run_research_agent(topic: str, author: str = "김사원", report_language: s
         "review_feedback": None,
         "review_status": None,
         "revision_count": 0,
+        "chart_paths": [],
     }
 
     # 워크플로우 생성 및 컴파일
     workflow = create_research_workflow()
     app = workflow.compile()
 
-    # 실행
-    print(f"🔍 Research Agent 시작: {topic}")
-    print(f"📝 리포트 언어: {'한국어' if report_language == 'ko' else 'English'}")  
-
     final_state = app.invoke(initial_state)
-    print("✅ Research Agent 완료!")
-
     return final_state
 
 
